@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template for the application instance role
+
+Parameters:
+  ImageId:
+    Description: Id of the AMI with Application
+    Type: AWS::EC2::Image::Id
+    Default: ami-00b18b3deb7f286ca
+  InstanceType:
+    Description: Type of instance
+    Type: String
+    Default: t2.micro
+  VpcId:
+    Description: VPC Id
+    Type: String
+  PrivateSubnetId:
+    Description: Reference of the PrivateSubnetId from the SSM
+    Type: String
+
+Resources:
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref ApplicationLaunchTemplate
+      SubnetId: !Ref PrivateSubnetId
+
+  ApplicationLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: !Ref ImageId
+        InstanceType: !Ref  InstanceType
+        IamInstanceProfile:
+          Arn: !GetAtt  InstanceProfile.Arn
+        SecurityGroupIds:
+          - !Ref ApplicationSecurityGroup
+        Monitoring:
+          Enabled: true
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            sudo yum install -y httpd
+            service httpd start
+            chkconfig httpd on
+    
+            cat <<EOF> /var/www/html/index.html
+            <html>
+              <body>
+                <h1> This is simple webpage hosted on EC2 instance</h1>
+                <p> This is working! </p>
+              </body>
+            </html>
+            EOF
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref InstanceRole
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+
+  ApplicationSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SecurityGroup for Application
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+      VpcId: !Ref VpcId
+
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SecurityGroup for Alb
+      GroupName: alb-sg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref VpcId
+
+Outputs:
+  InstanceId:
+    Description: The ID of the Instance
+    Value: !Ref Instance
+  InstanceRole:
+    Description: The instance role name
+    Value: !Ref InstanceRole
+    ApplicationLaunchTemplateId:
+      Description: The ID of the Application Launch Template
+      Value: !Ref ApplicationLaunchTemplate
