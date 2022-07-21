@@ -3,7 +3,8 @@
 deploy="aws cloudformation deploy \
     --stack-name my-app \
     --template-file application.yaml \
-    --parameter-overrides VpcId=<vpc_id> PrivateSubnetId=<private_subnet_id>
+    --parameter-overrides ImageId=ami-00b18b3deb7f286ca
+    --capabilities CAPABILITY_IAM
     --no-fail-on-empty-changeset
 "
 
