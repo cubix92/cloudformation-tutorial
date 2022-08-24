@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: Template for the application instance role
+Description: Application template
 
 Parameters:
   ImageId:
@@ -9,35 +9,58 @@ Parameters:
     Description: Type of instance
     Type: String
     Default: t2.micro
+  LaunchTemplateVersion:
+    Description: Launch template version
+    Type: String
+    Default: ''
+
+Conditions:
+  UseProvidedTemplateVersion: !Not [ !Equals [!Ref LaunchTemplateVersion, ''] ]
 
 Resources:
   Instance:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: !Ref ImageId
-      InstanceType: !Ref  InstanceType
-      IamInstanceProfile: !Ref  InstanceProfile
-      NetworkInterfaces:
-        - AssociatePublicIpAddress: true
-          DeviceIndex: 0
-          GroupSet:
-            - !Ref ApplicationSecurityGroup
-          SubnetId: !ImportValue subnet-public-1-id
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          sudo yum install -y httpd
-          service httpd start
-          chkconfig httpd on
-
-          cat <<EOF> /var/www/html/index.html
-          <html>
-            <body>
-              <h1> This is simple webpage hosted on EC2 instance</h1>
-              <p> This is working! </p>
-            </body>
-          </html>
-          EOF
+      LaunchTemplate:
+        LaunchTemplateId: !Ref ApplicationLaunchTemplate
+        Version: !If
+          - UseProvidedTemplateVersion
+          - !Ref LaunchTemplateVersion
+          - !GetAtt ApplicationLaunchTemplate.LatestVersionNumber
+      SubnetId: !ImportValue subnet-public-1-id
+  ApplicationLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: !Ref ImageId
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile:
+          Arn: !GetAtt InstanceProfile.Arn
+        SecurityGroupIds:
+          - !ImportValue main-security-group-id
+        Monitoring:
+          Enabled: true
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub ${AWS::StackName}-ALT
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            sudo yum install -y httpd24 php70 mod_ssl
+            service httpd start
+            chkconfig httpd on
+            
+            cat <<EOF> /var/www/html/index.html
+            <html>
+              <body>
+                <h1> This is simple webpage hosted on EC2 instance</h1>
+                <p> This is working!</p>
+                <small>$RANDOM</small>
+              </body>
+            </html>
+            EOF
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
@@ -59,21 +82,79 @@ Resources:
       Path: /
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
-  ApplicationSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
+  ApplicationAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
-      GroupDescription: SecurityGroup for Application
-      GroupName: application-sg
-      VpcId: !ImportValue network-vpc-id
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
+      LaunchTemplate:
+        LaunchTemplateId: !Ref ApplicationLaunchTemplate
+        Version: !If
+          - UseProvidedTemplateVersion
+          - !Ref LaunchTemplateVersion
+          - !GetAtt ApplicationLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 2
+      DesiredCapacity: 2
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 300
+      VPCZoneIdentifier:
+        - !ImportValue subnet-private-1-id
+        - !ImportValue subnet-private-2-id
+      TargetGroupARNs:
+        - !ImportValue application-target-group-id
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-ASG
+          PropagateAtLaunch: false
+  ScaleOutPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName:
+        Ref: ApplicationAutoScalingGroup
+      Cooldown: '300'
+      ScalingAdjustment: 1
+  ScaleInPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName:
+        Ref: ApplicationAutoScalingGroup
+      Cooldown: '300'
+      ScalingAdjustment: -1
+  CPUAlarmHigh:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: 1
+      Statistic: Average
+      Threshold: 70
+      AlarmDescription: High CPU Alarm to trigger the scale out policy
+      Period: 300
+      AlarmActions:
+        - Ref: ScaleOutPolicy
+      Namespace: AWS/EC2
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value:
+            Ref: ApplicationAutoScalingGroup
+      ComparisonOperator: GreaterThanThreshold
+      MetricName: CPUUtilization
+  CPUAlarmLow:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: 3
+      Statistic: Average
+      Threshold: 30
+      AlarmDescription: Low CPU Alarm to trigger the scale in policy
+      Period: 300
+      AlarmActions:
+        - Ref: ScaleInPolicy
+      Namespace: AWS/EC2
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value:
+            Ref: ApplicationAutoScalingGroup
+      ComparisonOperator: LessThanThreshold
+      MetricName: CPUUtilization
 
 Outputs:
   InstanceId:

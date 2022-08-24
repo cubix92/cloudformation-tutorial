@@ -66,14 +66,14 @@ Resources:
       VpcId: !Ref Vpc
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-PublicRouteTable
+          Value: !Sub ${AWS::StackName}-PUB_RT
   PrivateRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref Vpc
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-PrivateRouteTable
+          Value: !Sub ${AWS::StackName}-PRIV_RT
   PublicRoute:
     Type: AWS::EC2::Route
     DependsOn: InternetGatewayAttachment
@@ -119,6 +119,51 @@ Resources:
     Properties:
       AllocationId: !GetAtt Eip.AllocationId
       SubnetId: !Ref SubnetPublic1
+  MainSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Main Security Group
+      GroupName: application-sg
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Name: !Sub ${AWS::StackName}-LoadBalancer
+      SecurityGroups:
+        - !Ref MainSecurityGroup
+      Subnets:
+        - !Ref SubnetPublic1
+        - !Ref SubnetPublic2
+      Type: application
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-LB
+  ApplicationTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub ${AWS::StackName}-tg
+      HealthCheckPath: "/"
+      Port: 80
+      Protocol: 'HTTP'
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-TG
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ApplicationTargetGroup
 
 Outputs:
   VpcId:
@@ -141,3 +186,19 @@ Outputs:
     Value: !Ref SubnetPrivate2
     Export:
       Name: subnet-private-2-id
+  MainSecurityGroup:
+    Value: !Ref MainSecurityGroup
+    Export:
+      Name: main-security-group-id
+  LoadBalancer:
+    Value: !Ref LoadBalancer
+    Export:
+      Name: load-balancer-id
+  LoadBalancerUrl:
+    Value: !GetAtt LoadBalancer.DNSName
+    Export:
+      Name: load-balancer-url
+  ApplicationTargetGroup:
+    Value: !Ref ApplicationTargetGroup
+    Export:
+      Name: application-target-group-id

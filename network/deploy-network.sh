@@ -2,7 +2,7 @@
 
 deploy="aws cloudformation deploy \
     --stack-name basic-network \
-    --template-file network.yaml \
+    --template-file network/network.yaml \
     --no-fail-on-empty-changeset
 "
 
