@@ -1,11 +1,11 @@
 CLOUDFORMATION COMMANDS
 ====================================================
 
-CONFIGURATION AWS ACCOUNT
+CONFIGURATION ACCOUNT
 ----------------------------------------------------
     aws configure
 
-DEPLOY AWS STACK
+DEPLOY STACK
 ----------------------------------------------------
     aws cloudformation deploy \
         --stack-name $STACK_NAME \
@@ -15,7 +15,7 @@ DEPLOY AWS STACK
         --parameter-overrides $MY_PARAM_KEY=$MY_PARAM_VALUE $ANOTHER_PARAM_KEY=$ANOTHER_PARAM_VALUE \
         --tags $MY_TAG_KEY=$MY_TAG_VALUE $ANTOHER_TAG_KEY=$ANOTHER_TAG_VALUE 
 
-CREATE AWS STACK
+CREATE STACK
 ----------------------------------------------------
     aws cloudformation create-stack \
         --stack-name $STACK_NAME \
@@ -23,7 +23,7 @@ CREATE AWS STACK
         --parameters file://$PATH_TO_MY_FILE_WITH_PARAMS \
         --tags Key=$MY_TAG_KEY,Value=$MY_TAG_VALUE
 
-UPDATE AWS STACK
+UPDATE STACK
 ----------------------------------------------------
     aws cloudformation update-stack \
         --stack-name $STACK_NAME \
@@ -31,12 +31,12 @@ UPDATE AWS STACK
         --parameters file://$PATH_TO_MY_FILE_WITH_PARAMS \
         --tags Key=$MY_TAG_KEY,Value=$MY_TAG_VALUE
 
-DELETE AWS STACK
+DELETE STACK
 ----------------------------------------------------
     aws cloudformation delete-stack \
         --stack-name $STACK_NAME 
 
-CHECKING AWS STACK
+CHECK STACK
 ----------------------------------------------------
     aws cloudformation describe-stacks \
         --stack-name $MY_STACK_NAME \
@@ -46,7 +46,7 @@ CHECKING AWS STACK
     aws cloudformation describe-stack-events \
         --stack-name $STACK_NAME
 
-CREATE AWS PACKAGE
+CREATE PACKAGE
 ----------------------------------------------------
     aws cloudformation package \
         --template-file $PATH_TO_MY_TEMPLATE \
